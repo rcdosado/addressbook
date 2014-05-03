@@ -1,0 +1,11 @@
+﻿        static void Main()
+        {
+            var view = new AddFormView();
+            var model = new AddFormModel();
+            var controller = new AddFormController(model, view);
+
+            Application.EnableVisualStyles();
+           // Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(view); 
+
+        }

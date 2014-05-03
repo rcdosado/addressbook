@@ -1,0 +1,325 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Data;
+using System.Reflection;
+
+
+namespace AddressBook.Modules
+{
+
+    class SimpleORM
+    {
+        private Db db;
+
+        // The table
+        private string table;
+
+        // The primary key of the table
+        private string pk;
+
+        // The prefix used to distinguish certain properties as columns
+        protected char c_prefix = '_';
+
+        public string table_
+        {
+            set { table = value; }
+        }
+
+        public string pk_
+        {
+            set { pk = value; }
+        }
+
+        private List<string> internProperties;
+
+        public Dictionary<string, string> Properties;
+
+        public SimpleORM()
+        {
+            db = new Db();
+            Properties = new Dictionary<string, string>();
+            internProperties = new List<string>();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public SimpleORM find(int id = 0)
+        {
+            if (id != 0)
+            {
+                string sql = "SELECT * FROM " + table + " WHERE " + pk + "= @pk LIMIT 1";
+
+                DataTable d = db.query(sql, new string[] { "pk", id.ToString() });
+
+                Dictionary<string, string> row = new Dictionary<string, string>();
+
+                if (d.Rows.Count > 0)
+                {
+                    for (int i = 0; i < d.Columns.Count; i++)
+                    {
+                        row.Add(c_prefix + d.Columns[i].ColumnName.ToLower(), d.Rows[0][i].ToString());
+                    }
+                }
+
+                foreach (PropertyInfo pi in GetType().GetProperties())
+                {
+                    string propertyName = pi.Name;
+
+                    if (pi != null && pi.CanWrite)
+                    {
+                        if (row.ContainsKey(propertyName))
+                        {
+                            if (pi.PropertyType == typeof(string))
+                            {
+                                pi.SetValue(this, row[propertyName]);
+                            }
+                            if (pi.PropertyType == typeof(int))
+                            {
+                                pi.SetValue(this, int.Parse(row[propertyName]));
+                            }
+                        }
+                    }
+                }
+
+                internProperties.Clear();
+                Properties.Clear();
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns>Number of affacted rows</returns>
+        public int save(int id = 0)
+        {
+            bindProperties(this);
+
+            if (Properties.Count > 0)
+            {
+                if (id != 0)
+                {
+                    Properties[pk] = id.ToString();
+                }
+
+                string update = string.Empty;
+
+                foreach (string column in Properties.Keys)
+                {
+                    if (column != pk)
+                        update += column + " =@" + column + " , ";
+                }
+
+                update = update.Trim();
+                update = update.Substring(0, update.Length - 1);
+
+                string sql = "UPDATE " + table + " SET " + update + " WHERE " + pk + "= @pk LIMIT 1";
+
+                int pk_index_intern = internProperties.IndexOf(pk);
+
+                internProperties.RemoveAt(pk_index_intern);
+                internProperties.RemoveAt(pk_index_intern);
+
+                internProperties.Add("@pk");
+                internProperties.Add(Properties[pk]);
+
+                return db.nQuery(sql, internProperties.ToArray());
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns>Number of affacted rows</returns>
+        public int delete(int id = 0)
+        {
+            if (id > 0)
+            {
+
+                string sql = "DELETE FROM " + table + " WHERE " + pk + "= @pk LIMIT 1";
+                return db.nQuery(sql, new string[] { "pk", id.ToString() });
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        ///  To-do : test
+        /// </summary>
+        /// <returns>Number of affacted rows</returns>
+        public int create()
+        {
+            if (Properties.Count == 0)
+            {
+                bindProperties(this);
+            }
+
+            if (Properties.Count > 0)
+            {
+                // The column names
+                List<string> fields = Properties.Keys.ToList();
+
+                // The value of the columns
+                List<string> fieldsvals = Properties.Values.ToList();
+
+                int pk_index = fields.IndexOf(pk);
+                int pk_index_intern = internProperties.IndexOf(pk);
+
+                // Remove the primary key, we don't need that in an insert query
+                fields.RemoveAt(pk_index);
+                fieldsvals.RemoveAt(pk_index);
+
+                internProperties.RemoveAt(pk_index_intern);
+                internProperties.RemoveAt(pk_index_intern);
+
+                string sFields = String.Join(",", fields);
+
+                for (int i = 0; i < fieldsvals.Count; i++)
+                {
+                    fields[i] = "@" + fields[i];
+                }
+
+                string sql = "INSERT INTO " + table + "(" + sFields + ")" + " VALUES(" + String.Join(",", fields) + ")";
+
+                int result = db.nQuery(sql, internProperties.ToArray());
+
+                Properties.Clear();
+                internProperties.Clear();
+
+                return result;
+            }
+            else
+            {
+                string sql = "INSERT INTO " + table + "()" + " VALUES()";
+                return db.nQuery(sql);
+            }
+        }
+
+        /// <summary>
+        /// To-do: test
+        /// </summary>
+        /// <param name="o"></param>
+        /// <returns>Number of affacted rows</returns>
+        public int create(object[] obj)
+        {
+
+            int rows_affected = 0;
+
+            foreach (object o in obj)
+            {
+                bindProperties(o);
+                rows_affected += create();
+            }
+
+            return rows_affected;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public int create(List<object> obj)
+        {
+            int rows_affected = 0;
+
+            foreach (object o in obj)
+            {
+                bindProperties(o);
+                rows_affected += create();
+            }
+
+            return rows_affected;
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <returns>Datatable</returns>
+        public DataTable all()
+        {
+            return db.table(table);
+        }
+
+
+        // Aggregates methods
+
+        private double aggregateInit(string sql)
+        {
+            string value = db.single(sql);
+
+            double result;
+
+            if (value != null && double.TryParse(value, out result))
+            {
+                return double.Parse(value);
+            }
+
+            return 0;
+        }
+
+        public double min(string field)
+        {
+            return aggregateInit("SELECT min(" + field + ")" + " FROM " + table);
+        }
+
+        public double max(string field)
+        {
+            return aggregateInit("SELECT max(" + field + ")" + " FROM " + table);
+        }
+
+        public double avg(string field)
+        {
+            return Double.Parse(aggregateInit("SELECT avg(" + field + ")" + " FROM " + table).ToString());
+        }
+
+        public double sum(string field)
+        {
+            return aggregateInit("SELECT sum(" + field + ")" + " FROM " + table);
+        }
+
+        public double count(string field, int limit = 0)
+        {
+            if (limit > 0)
+            {
+                return aggregateInit("SELECT count(" + field + ")" + " FROM " + table + " LIMIT " + limit.ToString());
+            }
+
+            return aggregateInit("SELECT count(" + field + ")" + " FROM " + table);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="o"></param>
+        private void bindProperties(object o)
+        {
+            foreach (PropertyInfo pi in o.GetType().GetProperties())
+            {
+                // Table column prefix
+                if (pi.Name[0] == c_prefix)
+                {
+                    object property = pi.GetValue(o, null);
+                    if (property != null)
+                    {
+                        Properties[pi.Name.Substring(1)] = property.ToString();
+
+                        internProperties.Add(pi.Name.Substring(1));
+                        internProperties.Add(property.ToString());
+                    }
+                   property = pi.GetValue(o, null);
+
+                }
+            }//foreach
+        }
+    }
+
+}

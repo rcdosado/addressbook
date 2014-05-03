@@ -1,0 +1,33 @@
+﻿Original =
+	        Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new MainFormView());     
+            
+AddForm -             
+            var view = new AddFormView();
+            var model = new AddFormModel();
+
+            var controller = new AddFormController(model,view);
+            Application.EnableVisualStyles();
+            //Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(view);
+            
+            
+EditForm -
+
+            var view = new EditFormView();
+            var model = new EditFormModel();
+
+            var controller = new EditFormController(model, view);
+            Application.EnableVisualStyles();
+            //Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(view);            
+MainForm
+
+            var view = new MainFormView();
+            var model = new MainFormModel();
+            var controller = new MainFormController(model, view);
+
+            Application.EnableVisualStyles();
+           // Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(view);             
